@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const fs = require('fs');
+const cors = require('cors');
 
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
@@ -13,17 +14,16 @@ if (!TOKEN) {
 const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 
-// =====================
-// 🔥 FIX: Tilda + Railway body parsing
-// =====================
+// 🔥 FIX CORS (ГЛАВНОЕ ИСПРАВЛЕНИЕ)
+app.use(cors({
+    origin: '*'
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const DB_FILE = './stats.json';
 
-// =====================
-// DB
-// =====================
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) return {};
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
@@ -35,25 +35,12 @@ function saveStats(data) {
 
 let stats = loadStats();
 
-// =====================
-// DATE (MSK FIX)
-// =====================
 function getToday() {
     return new Date().toLocaleString("en-CA", {
         timeZone: "Europe/Moscow"
     }).slice(0, 10);
 }
 
-function getYesterday() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-
-    return d.toLocaleString("en-CA", {
-        timeZone: "Europe/Moscow"
-    }).slice(0, 10);
-}
-
-// =====================
 function ensureDay(day) {
     if (!stats[day]) {
         stats[day] = {
@@ -67,10 +54,8 @@ function ensureDay(day) {
     }
 }
 
-// =====================
-// REPORT
-// =====================
 function sendReport(chatId, day, title) {
+
     ensureDay(day);
 
     const d = stats[day];
@@ -91,88 +76,45 @@ function sendReport(chatId, day, title) {
     bot.sendMessage(chatId, report);
 }
 
-// =====================
-// TELEGRAM COMMANDS
-// =====================
 bot.on('message', (msg) => {
 
     if (msg.chat.id !== CHAT_ID) return;
 
-    const text = (msg.text || "")
-        .toLowerCase()
-        .trim()
-        .split('@')[0];
+    const text = (msg.text || "").toLowerCase().trim();
 
     const today = getToday();
 
     if (text === '/today' || text === 'сегодня') {
         sendReport(msg.chat.id, today, 'СТАТИСТИКА ЗА СЕГОДНЯ');
-        return;
-    }
-
-    if (text === 'вчера') {
-        sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
-        return;
     }
 });
 
-// =====================
-// 🔥 CLICK TRACKING (FIXED)
-// =====================
+// 🔥 CLICK TRACKING
 app.post('/click', (req, res) => {
 
-    console.log("RAW BODY:", req.body);
+    console.log("CLICK RECEIVED:", req.body);
 
-    let body = req.body;
-
-    // 🔥 FIX: если пришла строка
-    if (typeof body === 'string') {
-        try {
-            body = JSON.parse(body);
-        } catch (e) {
-            body = {};
-        }
-    }
-
+    const body = req.body || {};
     const today = getToday();
+
     ensureDay(today);
 
-    const source =
-        (body.source ||
-         body.utm_source ||
-         '').toLowerCase();
-
-    console.log("PARSED SOURCE:", source);
+    const source = (body.source || '').toLowerCase();
 
     if (source === 'telegram') stats[today].Telegram++;
     else if (source === 'whatsapp') stats[today].WhatsApp++;
     else if (source === 'max') stats[today].MAX++;
     else if (source === 'yandex') stats[today].yandex++;
     else if (source === 'seo') stats[today].seo++;
-    else if (source === 'direct') stats[today].direct++;
     else stats[today].direct++;
 
     saveStats(stats);
 
     res.sendStatus(200);
 });
-// =====================
-// AUTO REPORT 21:00 MSK
-// =====================
-setInterval(() => {
-    const now = new Date();
 
-    // 21:00 MSK = 18:00 UTC
-    if (now.getUTCHours() === 18 && now.getUTCMinutes() === 0) {
-        const today = getToday();
-        sendReport(CHAT_ID, today, '📊 АВТООТЧЁТ (21:00 МСК)');
-    }
-}, 60 * 1000);
-
-// =====================
 app.listen(process.env.PORT || 3000, () => {
     console.log("Bot started");
-    console.log("Server running");
 
     bot.sendMessage(CHAT_ID, "🟢 Bot online + analytics active");
 });
