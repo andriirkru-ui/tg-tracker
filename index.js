@@ -138,6 +138,11 @@ setInterval(() => {
 }, 60 * 1000);
 
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Bot started");
-  console.log("Server running with CORS enabled");
+    console.log("Bot started");
+    console.log("Server running with CORS enabled");
+
+    bot.sendMessage(
+        CHAT_ID,
+        "🟢 Bot online + CORS active"
+    );
 });
