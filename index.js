@@ -18,6 +18,8 @@ app.use(express.json());
 const DB_FILE = './stats.json';
 
 // =====================
+// DB
+// =====================
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) return {};
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
@@ -30,14 +32,21 @@ function saveStats(data) {
 let stats = loadStats();
 
 // =====================
+// DATE (🔥 FIX — MOSCOW TIME)
+// =====================
 function getToday() {
-    return new Date().toISOString().slice(0, 10);
+    return new Date().toLocaleString("en-CA", {
+        timeZone: "Europe/Moscow"
+    }).slice(0, 10);
 }
 
 function getYesterday() {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+
+    return d.toLocaleString("en-CA", {
+        timeZone: "Europe/Moscow"
+    }).slice(0, 10);
 }
 
 // =====================
@@ -55,12 +64,14 @@ function ensureDay(day) {
 }
 
 // =====================
+// PARSE (UTM + fallback)
+// =====================
 function parse(text, day) {
     if (!text) return;
 
     ensureDay(day);
 
-    const t = text.toLowerCase().trim(); // 🔥 FIX 1
+    const t = text.toLowerCase().trim();
 
     // UTM
     if (t.includes('utm_source=telegram')) stats[day].Telegram++;
@@ -90,7 +101,7 @@ function sendReport(chatId, day, title) {
     const report =
 `📊 ${title} (${day})
 
-📨 Telegram: ${d.Telegram}
+📩 Telegram: ${d.Telegram}
 📞 WhatsApp: ${d.WhatsApp}
 ⚡ MAX: ${d.MAX}
 
@@ -104,7 +115,7 @@ function sendReport(chatId, day, title) {
 }
 
 // =====================
-// FIXED COMMAND HANDLING 🔥
+// TELEGRAM COMMANDS
 // =====================
 bot.on('message', (msg) => {
 
@@ -113,17 +124,15 @@ bot.on('message', (msg) => {
     const text = (msg.text || "")
         .toLowerCase()
         .trim()
-        .split('@')[0]; // 🔥 FIX 2
+        .split('@')[0];
 
     const today = getToday();
 
-    // ✔ команда today
     if (text === '/today' || text === 'сегодня') {
         sendReport(msg.chat.id, today, 'СТАТИСТИКА ЗА СЕГОДНЯ');
         return;
     }
 
-    // ✔ вчера
     if (text === 'вчера') {
         sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
         return;
@@ -133,6 +142,8 @@ bot.on('message', (msg) => {
     saveStats(stats);
 });
 
+// =====================
+// TILDA / WEBHOOK
 // =====================
 app.post('/click', (req, res) => {
     const text = JSON.stringify(req.body || {});
@@ -144,6 +155,8 @@ app.post('/click', (req, res) => {
     res.sendStatus(200);
 });
 
+// =====================
+// AUTO REPORT 21:00 MSK
 // =====================
 setInterval(() => {
     const now = new Date();
@@ -157,4 +170,7 @@ setInterval(() => {
 // =====================
 app.listen(process.env.PORT || 3000, () => {
     console.log("Bot started");
+    console.log("Server running");
+
+    bot.sendMessage(CHAT_ID, "🟢 Bot online + analytics active");
 });
