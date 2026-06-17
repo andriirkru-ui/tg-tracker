@@ -1,20 +1,24 @@
 const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
 const fs = require('fs');
 
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
 if (!TOKEN) {
-    console.error("BOT_TOKEN not found!");
+    console.error("BOT_TOKEN not provided!");
     process.exit(1);
 }
 
 const bot = new TelegramBot(TOKEN, { polling: true });
+const app = express();
+
+app.use(express.json());
 
 const DB_FILE = './stats.json';
 
 // =====================
-// LOAD / SAVE
+// DB
 // =====================
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) return {};
@@ -28,7 +32,7 @@ function saveStats(data) {
 let stats = loadStats();
 
 // =====================
-// DATE HELPERS
+// DATE
 // =====================
 function getToday() {
     return new Date().toISOString().slice(0, 10);
@@ -57,7 +61,7 @@ function ensureDay(day) {
 }
 
 // =====================
-// PARSE (ГЛАВНАЯ ЛОГИКА)
+// PARSE (главная логика)
 // =====================
 function parse(text, day) {
     if (!text) return;
@@ -66,27 +70,22 @@ function parse(text, day) {
 
     const t = text.toLowerCase();
 
-    // =====================
-    // UTM PRIORITY (основной источник)
-    // =====================
+    // ===== UTM MODE =====
     if (t.includes('utm_source=telegram')) stats[day].Telegram++;
-    if (t.includes('utm_source=whatsapp')) stats[day].WhatsApp++;
-    if (t.includes('utm_source=max')) stats[day].MAX++;
+    else if (t.includes('utm_source=whatsapp')) stats[day].WhatsApp++;
+    else if (t.includes('utm_source=max')) stats[day].MAX++;
+    else if (t.includes('utm_source=yandex')) stats[day].yandex++;
+    else if (t.includes('utm_source=seo')) stats[day].seo++;
+    else if (t.includes('utm_source=direct')) stats[day].direct++;
 
-    if (t.includes('utm_source=yandex')) stats[day].yandex++;
-    if (t.includes('utm_source=seo')) stats[day].seo++;
-    if (t.includes('utm_source=direct')) stats[day].direct++;
-
-    // =====================
-    // FALLBACK (если UTM нет)
-    // =====================
-    if (!t.includes('utm_source=')) {
+    // ===== FALLBACK =====
+    else {
         if (t.includes('telegram')) stats[day].Telegram++;
         if (t.includes('whatsapp')) stats[day].WhatsApp++;
         if (t.includes('max')) stats[day].MAX++;
         if (t.includes('yandex')) stats[day].yandex++;
-        if (t.includes('direct')) stats[day].direct++;
         if (t.includes('seo')) stats[day].seo++;
+        if (t.includes('direct')) stats[day].direct++;
     }
 }
 
@@ -115,16 +114,15 @@ function sendReport(chatId, day, title) {
 }
 
 // =====================
-// BOT LISTENER
+// TELEGRAM COMMANDS
 // =====================
 bot.on('message', (msg) => {
 
-    if (msg.chat.id != CHAT_ID) return;
+    if (msg.chat.id !== CHAT_ID) return;
 
     const text = (msg.text || "").toLowerCase().split('@')[0];
     const today = getToday();
 
-    // команды
     if (text === '/today' || text === 'сегодня') {
         sendReport(msg.chat.id, today, 'СТАТИСТИКА ЗА СЕГОДНЯ');
         return;
@@ -135,9 +133,21 @@ bot.on('message', (msg) => {
         return;
     }
 
-    // парсинг кликов
     parse(text, today);
     saveStats(stats);
+});
+
+// =====================
+// HTTP ENDPOINT (TILDA → BOT)
+// =====================
+app.post('/click', (req, res) => {
+    const text = JSON.stringify(req.body || {});
+    const today = getToday();
+
+    parse(text, today);
+    saveStats(stats);
+
+    res.sendStatus(200);
 });
 
 // =====================
@@ -153,4 +163,10 @@ setInterval(() => {
 }, 60 * 1000);
 
 // =====================
-console.log("Bot started + UTM analytics + auto report enabled");
+// START SERVER
+// =====================
+app.listen(process.env.PORT || 3000, () => {
+    console.log("Server started");
+
+    bot.sendMessage(CHAT_ID, "🟢 Bot started + analytics online");
+});
