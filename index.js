@@ -23,12 +23,21 @@ function saveStats(data) {
 let stats = loadStats();
 
 // --------------------
-// DATE
+// DATE HELPERS
 // --------------------
 function getToday() {
     return new Date().toISOString().slice(0, 10);
 }
 
+function getYesterday() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+}
+
+// --------------------
+// INIT DAY
+// --------------------
 function ensureDay(day) {
     if (!stats[day]) {
         stats[day] = {
@@ -60,24 +69,15 @@ function parse(text, day) {
 }
 
 // --------------------
-// PREVENT DUPLICATE /today
+// REPORTS
 // --------------------
-let lastReportSent = null;
-
-// --------------------
-// TODAY REPORT
-// --------------------
-function sendToday(chatId) {
-    const day = getToday();
+function sendReport(chatId, day, title) {
     ensureDay(day);
-
-    // защита от дублей
-    if (lastReportSent === day) return;
 
     const d = stats[day];
 
     const report =
-`📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
+`📊 ${title} (${day})
 
 📨 Telegram: ${d.Telegram}
 📞 WhatsApp: ${d.WhatsApp}
@@ -90,30 +90,73 @@ function sendToday(chatId) {
 `;
 
     bot.sendMessage(chatId, report);
-
-    lastReportSent = day;
 }
 
 // --------------------
-// BOT LISTENER
+// BOT
 // --------------------
 bot.on('message', (msg) => {
     if (msg.chat.id != CHAT_ID) return;
 
-    const text = (msg.text || "").split('@')[0];
+    const text = (msg.text || "").toLowerCase().split('@')[0];
     const day = getToday();
 
-    // команда
-    if (text === '/today') {
-        sendToday(msg.chat.id);
+    // 🔥 РУССКИЕ КОМАНДЫ
+    if (text === 'сегодня') {
+        sendReport(msg.chat.id, getToday(), 'СТАТИСТИКА ЗА СЕГОДНЯ');
+        return;
+    }
+
+    if (text === 'вчера') {
+        sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
+        return;
+    }
+
+    if (text === 'неделя') {
+        let total = {
+            Telegram: 0,
+            WhatsApp: 0,
+            MAX: 0,
+            direct: 0,
+            yandex: 0,
+            seo: 0
+        };
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().slice(0, 10);
+
+            ensureDay(key);
+
+            const s = stats[key];
+
+            total.Telegram += s.Telegram;
+            total.WhatsApp += s.WhatsApp;
+            total.MAX += s.MAX;
+            total.direct += s.direct;
+            total.yandex += s.yandex;
+            total.seo += s.seo;
+        }
+
+        bot.sendMessage(chatId,
+`📊 СТАТИСТИКА ЗА НЕДЕЛЮ
+
+📨 Telegram: ${total.Telegram}
+📞 WhatsApp: ${total.WhatsApp}
+⚡ MAX: ${total.MAX}
+
+📈 Источники:
+- direct: ${total.direct}
+- yandex: ${total.yandex}
+- seo: ${total.seo}
+`);
         return;
     }
 
     // клики
     parse(text, day);
-
     saveStats(stats);
 });
 
-// --------------------
 console.log("Bot started");
