@@ -13,7 +13,11 @@ if (!TOKEN) {
 const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 
+// =====================
+// 🔥 FIX: Tilda + Railway body parsing
+// =====================
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const DB_FILE = './stats.json';
 
@@ -113,9 +117,11 @@ bot.on('message', (msg) => {
 });
 
 // =====================
-// 🔥 FIXED CLICK HANDLER (ВАЖНО)
+// 🔥 CLICK TRACKING (FIXED)
 // =====================
 app.post('/click', (req, res) => {
+
+    console.log("CLICK RECEIVED:", req.body); // диагностика
 
     const body = req.body || {};
     const today = getToday();
@@ -127,18 +133,19 @@ app.post('/click', (req, res) => {
     const campaign = (body.campaign || '').toLowerCase();
 
     // =====================
-    // TRAFFIC SOURCES
+    // COUNT LOGIC
     // =====================
+
     if (source === 'telegram') stats[today].Telegram++;
-    if (source === 'whatsapp') stats[today].WhatsApp++;
-    if (source === 'max') stats[today].MAX++;
+    else if (source === 'whatsapp') stats[today].WhatsApp++;
+    else if (source === 'max') stats[today].MAX++;
 
-    if (source === 'yandex') stats[today].yandex++;
-    if (source === 'seo') stats[today].seo++;
-    if (source === 'direct') stats[today].direct++;
+    else if (source === 'yandex') stats[today].yandex++;
+    else if (source === 'seo') stats[today].seo++;
+    else if (source === 'direct') stats[today].direct++;
 
-    // fallback (если source пустой)
-    if (!source) stats[today].direct++;
+    // fallback (если вообще пусто)
+    else stats[today].direct++;
 
     saveStats(stats);
 
@@ -151,6 +158,7 @@ app.post('/click', (req, res) => {
 setInterval(() => {
     const now = new Date();
 
+    // 21:00 MSK = 18:00 UTC
     if (now.getUTCHours() === 18 && now.getUTCMinutes() === 0) {
         const today = getToday();
         sendReport(CHAT_ID, today, '📊 АВТООТЧЁТ (21:00 МСК)');
