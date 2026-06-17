@@ -136,5 +136,3 @@ setInterval(() => {
 
 // --------------------
 console.log("Bot started + auto report enabled");
-// 👇 ВРЕМЕННЫЙ ТЕСТ АВТООТЧЁТА
-sendReport(CHAT_ID, getToday(), "TEST AUTO REPORT");
