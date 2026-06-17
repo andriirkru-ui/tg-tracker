@@ -18,8 +18,6 @@ app.use(express.json());
 const DB_FILE = './stats.json';
 
 // =====================
-// DB
-// =====================
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) return {};
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
@@ -32,8 +30,6 @@ function saveStats(data) {
 let stats = loadStats();
 
 // =====================
-// DATE
-// =====================
 function getToday() {
     return new Date().toISOString().slice(0, 10);
 }
@@ -44,8 +40,6 @@ function getYesterday() {
     return d.toISOString().slice(0, 10);
 }
 
-// =====================
-// INIT DAY
 // =====================
 function ensureDay(day) {
     if (!stats[day]) {
@@ -61,25 +55,23 @@ function ensureDay(day) {
 }
 
 // =====================
-// PARSE (главная логика)
-// =====================
 function parse(text, day) {
     if (!text) return;
 
     ensureDay(day);
 
-    const t = text.toLowerCase();
+    const t = text.toLowerCase().trim(); // 🔥 FIX 1
 
-    // ===== UTM MODE =====
+    // UTM
     if (t.includes('utm_source=telegram')) stats[day].Telegram++;
-    else if (t.includes('utm_source=whatsapp')) stats[day].WhatsApp++;
-    else if (t.includes('utm_source=max')) stats[day].MAX++;
-    else if (t.includes('utm_source=yandex')) stats[day].yandex++;
-    else if (t.includes('utm_source=seo')) stats[day].seo++;
-    else if (t.includes('utm_source=direct')) stats[day].direct++;
+    if (t.includes('utm_source=whatsapp')) stats[day].WhatsApp++;
+    if (t.includes('utm_source=max')) stats[day].MAX++;
+    if (t.includes('utm_source=yandex')) stats[day].yandex++;
+    if (t.includes('utm_source=seo')) stats[day].seo++;
+    if (t.includes('utm_source=direct')) stats[day].direct++;
 
-    // ===== FALLBACK =====
-    else {
+    // fallback
+    if (!t.includes('utm_source=')) {
         if (t.includes('telegram')) stats[day].Telegram++;
         if (t.includes('whatsapp')) stats[day].WhatsApp++;
         if (t.includes('max')) stats[day].MAX++;
@@ -89,8 +81,6 @@ function parse(text, day) {
     }
 }
 
-// =====================
-// REPORT
 // =====================
 function sendReport(chatId, day, title) {
     ensureDay(day);
@@ -114,20 +104,26 @@ function sendReport(chatId, day, title) {
 }
 
 // =====================
-// TELEGRAM COMMANDS
+// FIXED COMMAND HANDLING 🔥
 // =====================
 bot.on('message', (msg) => {
 
     if (msg.chat.id !== CHAT_ID) return;
 
-    const text = (msg.text || "").toLowerCase().split('@')[0];
+    const text = (msg.text || "")
+        .toLowerCase()
+        .trim()
+        .split('@')[0]; // 🔥 FIX 2
+
     const today = getToday();
 
+    // ✔ команда today
     if (text === '/today' || text === 'сегодня') {
         sendReport(msg.chat.id, today, 'СТАТИСТИКА ЗА СЕГОДНЯ');
         return;
     }
 
+    // ✔ вчера
     if (text === 'вчера') {
         sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
         return;
@@ -137,8 +133,6 @@ bot.on('message', (msg) => {
     saveStats(stats);
 });
 
-// =====================
-// HTTP ENDPOINT (TILDA → BOT)
 // =====================
 app.post('/click', (req, res) => {
     const text = JSON.stringify(req.body || {});
@@ -151,8 +145,6 @@ app.post('/click', (req, res) => {
 });
 
 // =====================
-// AUTO REPORT (21:00 MSK = 18:00 UTC)
-// =====================
 setInterval(() => {
     const now = new Date();
 
@@ -163,10 +155,6 @@ setInterval(() => {
 }, 60 * 1000);
 
 // =====================
-// START SERVER
-// =====================
 app.listen(process.env.PORT || 3000, () => {
-    console.log("Server started");
-
-    bot.sendMessage(CHAT_ID, "🟢 Bot started + analytics online");
+    console.log("Bot started");
 });
