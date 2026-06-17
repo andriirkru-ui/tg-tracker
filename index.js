@@ -12,9 +12,7 @@ const DB_FILE = './stats.json';
 // STORAGE
 // --------------------
 function loadStats() {
-    if (!fs.existsSync(DB_FILE)) {
-        return {};
-    }
+    if (!fs.existsSync(DB_FILE)) return {};
     return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
@@ -25,7 +23,7 @@ function saveStats(data) {
 let stats = loadStats();
 
 // --------------------
-// DATE KEY
+// DATE
 // --------------------
 function getToday() {
     return new Date().toISOString().slice(0, 10);
@@ -62,11 +60,19 @@ function parse(text, day) {
 }
 
 // --------------------
-// SEND TODAY REPORT
+// PREVENT DUPLICATE /today
+// --------------------
+let lastReportSent = null;
+
+// --------------------
+// TODAY REPORT
 // --------------------
 function sendToday(chatId) {
     const day = getToday();
     ensureDay(day);
+
+    // защита от дублей
+    if (lastReportSent === day) return;
 
     const d = stats[day];
 
@@ -84,19 +90,20 @@ function sendToday(chatId) {
 `;
 
     bot.sendMessage(chatId, report);
+
+    lastReportSent = day;
 }
 
 // --------------------
-// LISTENER
+// BOT LISTENER
 // --------------------
 bot.on('message', (msg) => {
-    console.log("INCOMING:", msg.chat.id, msg.text);
-    // if (msg.chat.id != CHAT_ID) return;
+    if (msg.chat.id != CHAT_ID) return;
 
-    const text = (msg.text || "").split('@')[0]; // FIX /today@botname
+    const text = (msg.text || "").split('@')[0];
     const day = getToday();
 
-    // команды
+    // команда
     if (text === '/today') {
         sendToday(msg.chat.id);
         return;
