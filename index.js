@@ -9,7 +9,7 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 const DB_FILE = './stats.json';
 
 // --------------------
-// LOAD STATS
+// STORAGE
 // --------------------
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) {
@@ -25,16 +25,15 @@ function saveStats(data) {
 let stats = loadStats();
 
 // --------------------
-// INIT DAY STORAGE
+// DATE KEY
 // --------------------
 function getToday() {
     return new Date().toISOString().slice(0, 10);
 }
 
-function ensureDay() {
-    const today = getToday();
-    if (!stats[today]) {
-        stats[today] = {
+function ensureDay(day) {
+    if (!stats[day]) {
+        stats[day] = {
             Telegram: 0,
             WhatsApp: 0,
             MAX: 0,
@@ -43,16 +42,15 @@ function ensureDay() {
             seo: 0
         };
     }
-    return today;
 }
 
 // --------------------
 // PARSE CLICK
 // --------------------
-function parse(text) {
+function parse(text, day) {
     if (!text) return;
 
-    const day = ensureDay();
+    ensureDay(day);
 
     if (text.includes('Telegram')) stats[day].Telegram++;
     if (text.includes('WhatsApp')) stats[day].WhatsApp++;
@@ -61,36 +59,19 @@ function parse(text) {
     if (text.includes('direct')) stats[day].direct++;
     if (text.includes('yandex')) stats[day].yandex++;
     if (text.includes('seo')) stats[day].seo++;
-
-    saveStats(stats);
 }
 
 // --------------------
-// TELEGRAM LISTENER
-// --------------------
-bot.on('message', (msg) => {
-    if (msg.chat.id != CHAT_ID) return;
-
-    const text = msg.text || "";
-
-    // обычные клики
-    parse(text);
-
-    // команды
-    if (text === '/today') {
-        sendToday(msg.chat.id);
-    }
-});
-
-// --------------------
-// LIVE STATS
+// SEND TODAY REPORT
 // --------------------
 function sendToday(chatId) {
-    const day = ensureDay();
+    const day = getToday();
+    ensureDay(day);
+
     const d = stats[day];
 
     const report =
-`📊 СТАТИСТИКА ЗА СЕГОДНЯ
+`📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
 
 📨 Telegram: ${d.Telegram}
 📞 WhatsApp: ${d.WhatsApp}
@@ -104,6 +85,27 @@ function sendToday(chatId) {
 
     bot.sendMessage(chatId, report);
 }
+
+// --------------------
+// LISTENER
+// --------------------
+bot.on('message', (msg) => {
+    if (msg.chat.id != CHAT_ID) return;
+
+    const text = (msg.text || "").split('@')[0]; // FIX /today@botname
+    const day = getToday();
+
+    // команды
+    if (text === '/today') {
+        sendToday(msg.chat.id);
+        return;
+    }
+
+    // клики
+    parse(text, day);
+
+    saveStats(stats);
+});
 
 // --------------------
 console.log("Bot started");
