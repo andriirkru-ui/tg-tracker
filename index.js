@@ -32,7 +32,7 @@ function saveStats(data) {
 let stats = loadStats();
 
 // =====================
-// DATE (🔥 FIX — MOSCOW TIME)
+// DATE (MSK FIX)
 // =====================
 function getToday() {
     return new Date().toLocaleString("en-CA", {
@@ -64,34 +64,7 @@ function ensureDay(day) {
 }
 
 // =====================
-// PARSE (UTM + fallback)
-// =====================
-function parse(text, day) {
-    if (!text) return;
-
-    ensureDay(day);
-
-    const t = text.toLowerCase().trim();
-
-    // UTM
-    if (t.includes('utm_source=telegram')) stats[day].Telegram++;
-    if (t.includes('utm_source=whatsapp')) stats[day].WhatsApp++;
-    if (t.includes('utm_source=max')) stats[day].MAX++;
-    if (t.includes('utm_source=yandex')) stats[day].yandex++;
-    if (t.includes('utm_source=seo')) stats[day].seo++;
-    if (t.includes('utm_source=direct')) stats[day].direct++;
-
-    // fallback
-    if (!t.includes('utm_source=')) {
-        if (t.includes('telegram')) stats[day].Telegram++;
-        if (t.includes('whatsapp')) stats[day].WhatsApp++;
-        if (t.includes('max')) stats[day].MAX++;
-        if (t.includes('yandex')) stats[day].yandex++;
-        if (t.includes('seo')) stats[day].seo++;
-        if (t.includes('direct')) stats[day].direct++;
-    }
-}
-
+// REPORT
 // =====================
 function sendReport(chatId, day, title) {
     ensureDay(day);
@@ -137,19 +110,36 @@ bot.on('message', (msg) => {
         sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
         return;
     }
-
-    parse(text, today);
-    saveStats(stats);
 });
 
 // =====================
-// TILDA / WEBHOOK
+// 🔥 FIXED CLICK HANDLER (ВАЖНО)
 // =====================
 app.post('/click', (req, res) => {
-    const text = JSON.stringify(req.body || {});
+
+    const body = req.body || {};
     const today = getToday();
 
-    parse(text, today);
+    ensureDay(today);
+
+    const source = (body.source || '').toLowerCase();
+    const medium = (body.medium || '').toLowerCase();
+    const campaign = (body.campaign || '').toLowerCase();
+
+    // =====================
+    // TRAFFIC SOURCES
+    // =====================
+    if (source === 'telegram') stats[today].Telegram++;
+    if (source === 'whatsapp') stats[today].WhatsApp++;
+    if (source === 'max') stats[today].MAX++;
+
+    if (source === 'yandex') stats[today].yandex++;
+    if (source === 'seo') stats[today].seo++;
+    if (source === 'direct') stats[today].direct++;
+
+    // fallback (если source пустой)
+    if (!source) stats[today].direct++;
+
     saveStats(stats);
 
     res.sendStatus(200);
