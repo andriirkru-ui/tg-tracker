@@ -90,7 +90,8 @@ function sendToday(chatId) {
 // LISTENER
 // --------------------
 bot.on('message', (msg) => {
-    if (msg.chat.id != CHAT_ID) return;
+    console.log("INCOMING:", msg.chat.id, msg.text);
+    // if (msg.chat.id != CHAT_ID) return;
 
     const text = (msg.text || "").split('@')[0]; // FIX /today@botname
     const day = getToday();
