@@ -121,25 +121,41 @@ bot.on('message', (msg) => {
 // =====================
 app.post('/click', (req, res) => {
 
-    const body = req.body || {};
-    const today = getToday();
+    console.log("RAW BODY:", req.body);
 
+    let body = req.body;
+
+    // 🔥 FIX: если пришла строка
+    if (typeof body === 'string') {
+        try {
+            body = JSON.parse(body);
+        } catch (e) {
+            body = {};
+        }
+    }
+
+    const today = getToday();
     ensureDay(today);
 
-    const source = (body.source || '').toLowerCase();
+    const source =
+        (body.source ||
+         body.utm_source ||
+         '').toLowerCase();
+
+    console.log("PARSED SOURCE:", source);
 
     if (source === 'telegram') stats[today].Telegram++;
-    if (source === 'whatsapp') stats[today].WhatsApp++;
-    if (source === 'max') stats[today].MAX++;
-    if (source === 'yandex') stats[today].yandex++;
-    if (source === 'seo') stats[today].seo++;
-    if (source === 'direct') stats[today].direct++;
+    else if (source === 'whatsapp') stats[today].WhatsApp++;
+    else if (source === 'max') stats[today].MAX++;
+    else if (source === 'yandex') stats[today].yandex++;
+    else if (source === 'seo') stats[today].seo++;
+    else if (source === 'direct') stats[today].direct++;
+    else stats[today].direct++;
 
     saveStats(stats);
 
     res.sendStatus(200);
 });
-
 // =====================
 // AUTO REPORT 21:00 MSK
 // =====================
