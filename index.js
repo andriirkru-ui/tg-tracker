@@ -7,9 +7,10 @@ const CHAT_ID = -5473275880;
 const bot = new TelegramBot(TOKEN, { polling: true });
 
 const DB_FILE = './stats.json';
+const STATE_FILE = './state.json';
 
 // --------------------
-// INIT STORAGE
+// LOAD DATA
 // --------------------
 function loadStats() {
     if (!fs.existsSync(DB_FILE)) {
@@ -19,8 +20,7 @@ function loadStats() {
             MAX: 0,
             yandex: 0,
             seo: 0,
-            direct: 0,
-            log: []
+            direct: 0
         };
     }
     return JSON.parse(fs.readFileSync(DB_FILE));
@@ -30,7 +30,22 @@ function saveStats(data) {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
+// --------------------
+// LOAD STATE (для защиты отчёта)
+// --------------------
+function loadState() {
+    if (!fs.existsSync(STATE_FILE)) {
+        return { lastReportDate: null };
+    }
+    return JSON.parse(fs.readFileSync(STATE_FILE));
+}
+
+function saveState(data) {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+}
+
 let stats = loadStats();
+let state = loadState();
 
 // --------------------
 // PARSE CLICK
@@ -40,44 +55,14 @@ function parse(text) {
 
     let changed = false;
 
-    if (text.includes('Telegram')) {
-        stats.Telegram++;
-        changed = true;
-    }
+    if (text.includes('Telegram')) { stats.Telegram++; changed = true; }
+    if (text.includes('WhatsApp')) { stats.WhatsApp++; changed = true; }
+    if (text.includes('MAX')) { stats.MAX++; changed = true; }
+    if (text.includes('yandex')) { stats.yandex++; changed = true; }
+    if (text.includes('seo')) { stats.seo++; changed = true; }
+    if (text.includes('direct')) { stats.direct++; changed = true; }
 
-    if (text.includes('WhatsApp')) {
-        stats.WhatsApp++;
-        changed = true;
-    }
-
-    if (text.includes('MAX')) {
-        stats.MAX++;
-        changed = true;
-    }
-
-    if (text.includes('yandex')) {
-        stats.yandex++;
-        changed = true;
-    }
-
-    if (text.includes('seo')) {
-        stats.seo++;
-        changed = true;
-    }
-
-    if (text.includes('direct')) {
-        stats.direct++;
-        changed = true;
-    }
-
-    if (changed) {
-        stats.log.push({
-            time: new Date().toISOString(),
-            text
-        });
-
-        saveStats(stats);
-    }
+    if (changed) saveStats(stats);
 }
 
 // --------------------
@@ -89,11 +74,16 @@ bot.on('message', (msg) => {
 });
 
 // --------------------
-// DAILY REPORT (21:00)
+// SEND REPORT
 // --------------------
 function sendReport() {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // защита от дубля
+    if (state.lastReportDate === today) return;
+
     const report =
-`📊 ОТЧЁТ ЗА ДЕНЬ
+`📊 ОТЧЁТ ЗА ДЕНЬ (${today})
 
 📨 Telegram: ${stats.Telegram}
 📞 WhatsApp: ${stats.WhatsApp}
@@ -107,28 +97,36 @@ function sendReport() {
 
     bot.sendMessage(CHAT_ID, report);
 
-    // reset after report
+    // reset stats
     stats = {
         Telegram: 0,
         WhatsApp: 0,
         MAX: 0,
         yandex: 0,
         seo: 0,
-        direct: 0,
-        log: []
+        direct: 0
     };
 
     saveStats(stats);
+
+    // save state
+    state.lastReportDate = today;
+    saveState(state);
 }
 
 // --------------------
-// TIMER 21:00
+// SAFE TIMER (каждую минуту)
 // --------------------
 setInterval(() => {
     const now = new Date();
-    if (now.getHours() === 21 && now.getMinutes() === 0) {
+
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+
+    if (hours === 21 && minutes === 0) {
         sendReport();
     }
 }, 60000);
 
+// --------------------
 console.log("Bot started");
