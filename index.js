@@ -121,31 +121,19 @@ bot.on('message', (msg) => {
 // =====================
 app.post('/click', (req, res) => {
 
-    console.log("CLICK RECEIVED:", req.body); // диагностика
-
     const body = req.body || {};
     const today = getToday();
 
     ensureDay(today);
 
     const source = (body.source || '').toLowerCase();
-    const medium = (body.medium || '').toLowerCase();
-    const campaign = (body.campaign || '').toLowerCase();
-
-    // =====================
-    // COUNT LOGIC
-    // =====================
 
     if (source === 'telegram') stats[today].Telegram++;
-    else if (source === 'whatsapp') stats[today].WhatsApp++;
-    else if (source === 'max') stats[today].MAX++;
-
-    else if (source === 'yandex') stats[today].yandex++;
-    else if (source === 'seo') stats[today].seo++;
-    else if (source === 'direct') stats[today].direct++;
-
-    // fallback (если вообще пусто)
-    else stats[today].direct++;
+    if (source === 'whatsapp') stats[today].WhatsApp++;
+    if (source === 'max') stats[today].MAX++;
+    if (source === 'yandex') stats[today].yandex++;
+    if (source === 'seo') stats[today].seo++;
+    if (source === 'direct') stats[today].direct++;
 
     saveStats(stats);
 
