@@ -23,7 +23,7 @@ function saveStats(data) {
 let stats = loadStats();
 
 // --------------------
-// DATE HELPERS
+// DATE
 // --------------------
 function getToday() {
     return new Date().toISOString().slice(0, 10);
@@ -36,7 +36,7 @@ function getYesterday() {
 }
 
 // --------------------
-// INIT DAY
+// INIT
 // --------------------
 function ensureDay(day) {
     if (!stats[day]) {
@@ -52,6 +52,18 @@ function ensureDay(day) {
 }
 
 // --------------------
+// CLEAN TEXT (ВАЖНО)
+// --------------------
+function норм(text) {
+    return (text || "")
+        .toString()
+        .toLowerCase()
+        .replace(/\u200b/g, '')   // убираем невидимые символы
+        .trim()
+        .split('@')[0];
+}
+
+// --------------------
 // PARSE CLICK
 // --------------------
 function parse(text, day) {
@@ -59,9 +71,9 @@ function parse(text, day) {
 
     ensureDay(day);
 
-    if (text.includes('Telegram')) stats[day].Telegram++;
-    if (text.includes('WhatsApp')) stats[day].WhatsApp++;
-    if (text.includes('MAX')) stats[day].MAX++;
+    if (text.includes('telegram')) stats[day].Telegram++;
+    if (text.includes('whatsapp')) stats[day].WhatsApp++;
+    if (text.includes('max')) stats[day].MAX++;
 
     if (text.includes('direct')) stats[day].direct++;
     if (text.includes('yandex')) stats[day].yandex++;
@@ -69,7 +81,7 @@ function parse(text, day) {
 }
 
 // --------------------
-// REPORTS
+// REPORT
 // --------------------
 function sendReport(chatId, day, title) {
     ensureDay(day);
@@ -96,65 +108,38 @@ function sendReport(chatId, day, title) {
 // BOT
 // --------------------
 bot.on('message', (msg) => {
+
     if (msg.chat.id != CHAT_ID) return;
 
-    const text = (msg.text || "").toLowerCase().split('@')[0];
+    const text = норм(msg.text);
     const day = getToday();
 
-    // 🔥 РУССКИЕ КОМАНДЫ
-    if (text === 'сегодня') {
+    console.log("IN:", msg.chat.id, text);
+
+    // --------------------
+    // КОМАНДЫ (РУССКИЕ + /)
+    // --------------------
+    if (
+        text === '/today' ||
+        text === 'сегодня' ||
+        text === '/сегодня'
+    ) {
         sendReport(msg.chat.id, getToday(), 'СТАТИСТИКА ЗА СЕГОДНЯ');
         return;
     }
 
-    if (text === 'вчера') {
+    if (
+        text === 'вчера' ||
+        text === '/yesterday' ||
+        text === '/вчера'
+    ) {
         sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
         return;
     }
 
-    if (text === 'неделя') {
-        let total = {
-            Telegram: 0,
-            WhatsApp: 0,
-            MAX: 0,
-            direct: 0,
-            yandex: 0,
-            seo: 0
-        };
-
-        for (let i = 0; i < 7; i++) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-
-            ensureDay(key);
-
-            const s = stats[key];
-
-            total.Telegram += s.Telegram;
-            total.WhatsApp += s.WhatsApp;
-            total.MAX += s.MAX;
-            total.direct += s.direct;
-            total.yandex += s.yandex;
-            total.seo += s.seo;
-        }
-
-        bot.sendMessage(chatId,
-`📊 СТАТИСТИКА ЗА НЕДЕЛЮ
-
-📨 Telegram: ${total.Telegram}
-📞 WhatsApp: ${total.WhatsApp}
-⚡ MAX: ${total.MAX}
-
-📈 Источники:
-- direct: ${total.direct}
-- yandex: ${total.yandex}
-- seo: ${total.seo}
-`);
-        return;
-    }
-
-    // клики
+    // --------------------
+    // КЛИКИ
+    // --------------------
     parse(text, day);
     saveStats(stats);
 });
