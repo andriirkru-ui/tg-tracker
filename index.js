@@ -36,7 +36,7 @@ function getYesterday() {
 }
 
 // --------------------
-// INIT
+// INIT DAY
 // --------------------
 function ensureDay(day) {
     if (!stats[day]) {
@@ -52,32 +52,22 @@ function ensureDay(day) {
 }
 
 // --------------------
-// CLEAN TEXT (ВАЖНО)
-// --------------------
-function норм(text) {
-    return (text || "")
-        .toString()
-        .toLowerCase()
-        .replace(/\u200b/g, '')   // убираем невидимые символы
-        .trim()
-        .split('@')[0];
-}
-
-// --------------------
-// PARSE CLICK
+// PARSE
 // --------------------
 function parse(text, day) {
     if (!text) return;
 
     ensureDay(day);
 
-    if (text.includes('telegram')) stats[day].Telegram++;
-    if (text.includes('whatsapp')) stats[day].WhatsApp++;
-    if (text.includes('max')) stats[day].MAX++;
+    const t = text.toLowerCase();
 
-    if (text.includes('direct')) stats[day].direct++;
-    if (text.includes('yandex')) stats[day].yandex++;
-    if (text.includes('seo')) stats[day].seo++;
+    if (t.includes('telegram')) stats[day].Telegram++;
+    if (t.includes('whatsapp')) stats[day].WhatsApp++;
+    if (t.includes('max')) stats[day].MAX++;
+
+    if (t.includes('direct')) stats[day].direct++;
+    if (t.includes('yandex')) stats[day].yandex++;
+    if (t.includes('seo')) stats[day].seo++;
 }
 
 // --------------------
@@ -105,43 +95,44 @@ function sendReport(chatId, day, title) {
 }
 
 // --------------------
-// BOT
+// COMMANDS
 // --------------------
 bot.on('message', (msg) => {
 
     if (msg.chat.id != CHAT_ID) return;
 
-    const text = норм(msg.text);
-    const day = getToday();
+    const text = (msg.text || "").toLowerCase().split('@')[0];
 
-    console.log("IN:", msg.chat.id, text);
+    const today = getToday();
 
-    // --------------------
-    // КОМАНДЫ (РУССКИЕ + /)
-    // --------------------
-    if (
-        text === '/today' ||
-        text === 'сегодня' ||
-        text === '/сегодня'
-    ) {
-        sendReport(msg.chat.id, getToday(), 'СТАТИСТИКА ЗА СЕГОДНЯ');
+    // ручной отчёт
+    if (text === '/today' || text === 'сегодня') {
+        sendReport(msg.chat.id, today, 'СТАТИСТИКА ЗА СЕГОДНЯ');
         return;
     }
 
-    if (
-        text === 'вчера' ||
-        text === '/yesterday' ||
-        text === '/вчера'
-    ) {
+    if (text === 'вчера') {
         sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
         return;
     }
 
-    // --------------------
-    // КЛИКИ
-    // --------------------
-    parse(text, day);
+    // клики
+    parse(text, today);
     saveStats(stats);
 });
 
-console.log("Bot started");
+// --------------------
+// AUTO REPORT 21:00 MSK (18:00 UTC)
+// --------------------
+setInterval(() => {
+    const now = new Date();
+
+    // 18:00 UTC = 21:00 MSK
+    if (now.getUTCHours() === 18 && now.getUTCMinutes() === 0) {
+        const today = getToday();
+        sendReport(CHAT_ID, today, '📊 АВТООТЧЁТ (21:00 МСК)');
+    }
+}, 60 * 1000);
+
+// --------------------
+console.log("Bot started + auto report enabled");
