@@ -1,16 +1,24 @@
 const express = require('express');
-const app = express();
+const cors = require('cors');
 
+const app = express();
 const PORT = process.env.PORT || 8080;
 
 /* =========================
-   BODY PARSERS (КРИТИЧНО)
+   CORS FIX (КРИТИЧНО)
+========================= */
+app.use(cors({
+    origin: '*'
+}));
+
+/* =========================
+   BODY PARSERS
 ========================= */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* =========================
-   SIMPLE STATS STORAGE
+   STATS
 ========================= */
 const stats = {
     Telegram: 0,
@@ -40,44 +48,23 @@ app.post('/click', (req, res) => {
 
     const data = req.body || {};
 
-    // messenger tracking
     const messenger = data.messenger || null;
 
-    if (messenger === 'telegram') {
-        stats.Telegram = (stats.Telegram || 0) + 1;
-    }
+    if (messenger === 'telegram') stats.Telegram++;
+    if (messenger === 'whatsapp') stats.WhatsApp++;
+    if (messenger === 'max') stats.MAX++;
 
-    if (messenger === 'whatsapp') {
-        stats.WhatsApp = (stats.WhatsApp || 0) + 1;
-    }
-
-    if (messenger === 'max') {
-        stats.MAX = (stats.MAX || 0) + 1;
-    }
-
-    // source tracking
     const source = data.source || 'direct';
 
-    if (source === 'yandex') {
-        stats.sources.yandex++;
-    } else if (source === 'seo') {
-        stats.sources.seo++;
-    } else {
-        stats.sources.direct++;
-    }
+    if (source === 'yandex') stats.sources.yandex++;
+    else if (source === 'seo') stats.sources.seo++;
+    else stats.sources.direct++;
 
     res.json({ ok: true });
 });
 
 /* =========================
-   STATS ENDPOINT (optional)
-========================= */
-app.get('/stats', (req, res) => {
-    res.json(stats);
-});
-
-/* =========================
-   START SERVER
+   START
 ========================= */
 app.listen(PORT, () => {
     console.log("🚀 SERVER STARTED (WEBHOOK MODE)");
