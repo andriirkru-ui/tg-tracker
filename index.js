@@ -5,11 +5,16 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 /* =========================
-   CORS FIX (КРИТИЧНО)
+   CORS — ЖЕЛЕЗНЫЙ РЕЖИМ
 ========================= */
 app.use(cors({
-    origin: '*'
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
 }));
+
+// ОБЯЗАТЕЛЬНО handle preflight
+app.options('*', cors());
 
 /* =========================
    BODY PARSERS
@@ -32,10 +37,10 @@ const stats = {
 };
 
 /* =========================
-   ROOT
+   ROOT CHECK
 ========================= */
 app.get('/', (req, res) => {
-    res.send('Server running (WEBHOOK MODE)');
+    res.send('OK');
 });
 
 /* =========================
@@ -48,7 +53,7 @@ app.post('/click', (req, res) => {
 
     const data = req.body || {};
 
-    const messenger = data.messenger || null;
+    const messenger = data.messenger;
 
     if (messenger === 'telegram') stats.Telegram++;
     if (messenger === 'whatsapp') stats.WhatsApp++;
