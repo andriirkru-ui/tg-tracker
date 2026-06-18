@@ -1,5 +1,4 @@
 const express = require("express");
-const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
@@ -9,46 +8,45 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
 console.log("🚀 SERVER STARTED");
-console.log("BOT_TOKEN exists:", !!BOT_TOKEN);
-console.log("CHAT_ID value:", CHAT_ID); // 👈 ВАЖНО (НЕ boolean)
+console.log("BOT_TOKEN:", !!BOT_TOKEN);
+console.log("CHAT_ID:", !!CHAT_ID);
 
 app.post("/click", async (req, res) => {
     try {
         console.log("🔥 CLICK RECEIVED");
-        console.log("BODY:", req.body);
+        console.log(req.body);
 
         const data = req.body || {};
 
         const text =
-            `📊 TRACKER EVENT\n\n` +
-            `event: ${data.event || "unknown"}\n` +
-            `messenger: ${data.messenger || "-"}\n` +
-            `source: ${data.source || "-"}\n` +
-            `campaign: ${data.campaign || "-"}\n` +
+            `📊 TRACKER\n` +
+            `event: ${data.event || "-" }\n` +
+            `messenger: ${data.messenger || "-" }\n` +
+            `source: ${data.source || "-" }\n` +
             `url: ${data.url || "-"}`;
 
-        if (CHAT_ID) {
-            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+        if (CHAT_ID && BOT_TOKEN) {
+            const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
 
-            const tgRes = await fetch(url, {
+            const response = await fetch(tgUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     chat_id: CHAT_ID,
-                    text: text
+                    text
                 })
             });
 
-            const result = await tgRes.text();
-            console.log("📨 TELEGRAM RESPONSE:", result);
-        } else {
-            console.log("❌ NO CHAT_ID");
+            const result = await response.text();
+            console.log("📨 TG RESPONSE:", result);
         }
 
         res.json({ ok: true });
 
-    } catch (err) {
-        console.error("❌ ERROR:", err);
+    } catch (e) {
+        console.error("❌ ERROR:", e);
         res.status(500).json({ ok: false });
     }
 });
