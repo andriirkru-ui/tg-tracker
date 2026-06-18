@@ -11,10 +11,40 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+/**
+ * 🔥 FIX 409:
+ * stop any stuck polling session before start
+ */
+try {
+  const botTmp = new TelegramBot(TOKEN);
+  botTmp.stopPolling();
+} catch (e) {
+  // ignore
+}
+
+/**
+ * ✅ STABLE POLLING CONFIG (NO 409 LOOP)
+ */
+const bot = new TelegramBot(TOKEN, {
+  polling: {
+    autoStart: true,
+    interval: 2000,
+    params: {
+      timeout: 10
+    }
+  }
+});
+
 const app = express();
 
-app.use(cors({ origin: '*' }));
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
+}));
+
+app.options('*', cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,14 +67,6 @@ function getToday() {
   }).slice(0, 10);
 }
 
-function getYesterday() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleString("en-CA", {
-    timeZone: "Europe/Moscow"
-  }).slice(0, 10);
-}
-
 function ensureDay(day) {
   if (!stats[day]) {
     stats[day] = {
@@ -62,10 +84,10 @@ function sendReport(chatId, day, title) {
   ensureDay(day);
   const d = stats[day];
 
-  const report =
+  const text =
 `📊 ${title} (${day})
 
-📩 Клики в мессенджеры:
+📩 Мессенджеры:
 Telegram: ${d.Telegram}
 WhatsApp: ${d.WhatsApp}
 MAX: ${d.MAX}
@@ -76,7 +98,7 @@ yandex: ${d.yandex}
 seo: ${d.seo}
 `;
 
-  bot.sendMessage(chatId, report);
+  bot.sendMessage(chatId, text);
 }
 
 bot.on('message', (msg) => {
@@ -84,14 +106,8 @@ bot.on('message', (msg) => {
 
   const text = (msg.text || "").toLowerCase().trim().split('@')[0];
 
-  if (text === '/today' || text === 'сегодня') {
-    sendReport(msg.chat.id, getToday(), 'СТАТИСТИКА ЗА СЕГОДНЯ');
-    return;
-  }
-
-  if (text === 'вчера') {
-    sendReport(msg.chat.id, getYesterday(), 'СТАТИСТИКА ЗА ВЧЕРА');
-    return;
+  if (text === 'сегодня' || text === '/today') {
+    sendReport(msg.chat.id, getToday(), "СТАТИСТИКА ЗА СЕГОДНЯ");
   }
 });
 
@@ -99,43 +115,41 @@ app.get('/', (req, res) => {
   res.send('Tracker is running');
 });
 
+/**
+ * 📌 CLICK API
+ */
 app.post('/click', (req, res) => {
-  console.log("CLICK RECEIVED:", req.body);
-
   const body = req.body || {};
-  const today = getToday();
-  ensureDay(today);
+  const day = getToday();
+
+  ensureDay(day);
 
   const event = (body.event || '').toLowerCase();
-  const source = (body.source || 'direct').toLowerCase();
+  const source = (body.source || '').toLowerCase();
   const messenger = (body.messenger || '').toLowerCase();
 
+  console.log("CLICK RECEIVED:", body);
+
   if (event === 'visit') {
-    if (source === 'yandex') stats[today].yandex++;
-    else if (source === 'seo') stats[today].seo++;
-    else stats[today].direct++;
+    if (source === 'yandex') stats[day].yandex++;
+    else if (source === 'seo') stats[day].seo++;
+    else stats[day].direct++;
   }
 
   if (event === 'messenger_click') {
-    if (messenger === 'telegram') stats[today].Telegram++;
-    if (messenger === 'whatsapp') stats[today].WhatsApp++;
-    if (messenger === 'max') stats[today].MAX++;
+    if (messenger === 'telegram') stats[day].Telegram++;
+    if (messenger === 'whatsapp') stats[day].WhatsApp++;
+    if (messenger === 'max') stats[day].MAX++;
   }
 
   saveStats(stats);
-  res.status(200).json({ ok: true });
+
+  res.json({ ok: true });
 });
-
-setInterval(() => {
-  const now = new Date();
-
-  if (now.getUTCHours() === 18 && now.getUTCMinutes() === 0) {
-    sendReport(CHAT_ID, getToday(), '📊 АВТООТЧЁТ 21:00 МСК');
-  }
-}, 60 * 1000);
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("Bot started");
   console.log("Server running with CORS enabled");
-  bot.sendMessage(CHAT_ID, "🟢 Bot online + separated analytics active");
+
+  bot.sendMessage(CHAT_ID, "🟢 Bot online + stable polling + analytics active");
 });
