@@ -6,40 +6,54 @@ const fs = require('fs');
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
+if (!TOKEN) {
+    console.error("BOT_TOKEN not provided!");
+    process.exit(1);
+}
+
 const app = express();
 
-app.use(cors({ origin: '*' }));
-
 /**
- * ⚠️ ВАЖНО: RAW BODY (fix webhook drop)
+ * ✅ CORS для Tilda
  */
-app.use(express.json({
-    verify: (req, res, buf) => {
-        req.rawBody = buf.toString();
-    }
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
 }));
 
+app.use(express.json());
+
+/**
+ * ⚠️ ВАЖНО: webhook mode (БЕЗ polling)
+ */
 const bot = new TelegramBot(TOKEN);
 
 /**
- * 🚨 ROOT WEBHOOK (НЕ /telegram)
- * это убирает 100% проблем Railway routing
+ * =========================
+ * 📡 WEBHOOK ENDPOINT
+ * =========================
+ * СЮДА ДОЛЖЕН СТУЧАТЬ TELEGRAM
  */
 app.post('/', (req, res) => {
 
-    console.log("🔥 WEBHOOK HIT:", req.body);
+    // 🔥 ВАЖНЕЙШИЙ ЛОГ (проверка что Telegram реально пришёл)
+    console.log("🔥 WEBHOOK HIT RECEIVED");
+    console.log(JSON.stringify(req.body, null, 2));
 
     try {
         bot.processUpdate(req.body);
-    } catch (e) {
-        console.error("WEBHOOK ERROR:", e);
+    } catch (err) {
+        console.error("WEBHOOK ERROR:", err);
     }
 
     res.sendStatus(200);
 });
 
 /**
- * 📊 CLICK TRACKER
+ * =========================
+ * 📊 STORAGE
+ * =========================
  */
 const DB_FILE = './stats.json';
 
@@ -54,6 +68,9 @@ function saveStats(data) {
 
 let stats = loadStats();
 
+/**
+ * 📅 DATE (MSK)
+ */
 function getToday() {
     return new Date().toLocaleString("en-CA", {
         timeZone: "Europe/Moscow"
@@ -73,6 +90,11 @@ function ensure(day) {
     }
 }
 
+/**
+ * =========================
+ * 📥 CLICK TRACKER (TILDA)
+ * =========================
+ */
 app.post('/click', (req, res) => {
     const body = req.body || {};
     const day = getToday();
@@ -99,36 +121,48 @@ app.post('/click', (req, res) => {
 
     saveStats(stats);
 
+    console.log("📊 CLICK RECEIVED:", body);
+
     res.json({ ok: true });
 });
 
 /**
- * 🤖 COMMANDS
+ * =========================
+ * 🤖 TELEGRAM COMMANDS
+ * =========================
  */
 bot.on('message', (msg) => {
     if (msg.chat.id !== CHAT_ID) return;
 
-    if ((msg.text || '').toLowerCase() === 'сегодня') {
+    const text = (msg.text || '').toLowerCase();
+
+    if (text === 'сегодня' || text === '/today') {
         const day = getToday();
         ensure(day);
 
         const d = stats[day];
 
         bot.sendMessage(msg.chat.id,
-`📊 СТАТИСТИКА (${day})
+`📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
 
-Telegram: ${d.Telegram}
-WhatsApp: ${d.WhatsApp}
-MAX: ${d.MAX}
+📩 Telegram: ${d.Telegram}
+📩 WhatsApp: ${d.WhatsApp}
+⚡ MAX: ${d.MAX}
 
-direct: ${d.direct}
-yandex: ${d.yandex}
-seo: ${d.seo}`);
+📈 Источники:
+- direct: ${d.direct}
+- yandex: ${d.yandex}
+- seo: ${d.seo}`);
     }
 });
 
+/**
+ * =========================
+ * 🚀 START SERVER
+ * =========================
+ */
 app.listen(process.env.PORT || 3000, () => {
-    console.log("🚀 SERVER READY (ROOT WEBHOOK MODE)");
+    console.log("🚀 SERVER STARTED (WEBHOOK MODE)");
 
-    bot.sendMessage(CHAT_ID, "🟢 Bot online (ROOT webhook mode)");
+    bot.sendMessage(CHAT_ID, "🟢 Bot online + webhook active + tracking ready");
 });
