@@ -6,31 +6,40 @@ const fs = require('fs');
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
-if (!TOKEN) {
-    console.error("BOT_TOKEN not provided!");
-    process.exit(1);
-}
-
 const app = express();
 
+app.use(cors({ origin: '*' }));
+
 /**
- * ✅ CORS (Tilda → Railway)
+ * ⚠️ ВАЖНО: RAW BODY (fix webhook drop)
  */
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf.toString();
+    }
 }));
 
-app.use(express.json());
-
-/**
- * ⚠️ WEBHOOK MODE (NO POLLING!)
- */
 const bot = new TelegramBot(TOKEN);
 
 /**
- * 📦 DB
+ * 🚨 ROOT WEBHOOK (НЕ /telegram)
+ * это убирает 100% проблем Railway routing
+ */
+app.post('/', (req, res) => {
+
+    console.log("🔥 WEBHOOK HIT:", req.body);
+
+    try {
+        bot.processUpdate(req.body);
+    } catch (e) {
+        console.error("WEBHOOK ERROR:", e);
+    }
+
+    res.sendStatus(200);
+});
+
+/**
+ * 📊 CLICK TRACKER
  */
 const DB_FILE = './stats.json';
 
@@ -45,16 +54,13 @@ function saveStats(data) {
 
 let stats = loadStats();
 
-/**
- * 📅 DATE (MSK SAFE)
- */
 function getToday() {
     return new Date().toLocaleString("en-CA", {
         timeZone: "Europe/Moscow"
     }).slice(0, 10);
 }
 
-function ensureDay(day) {
+function ensure(day) {
     if (!stats[day]) {
         stats[day] = {
             Telegram: 0,
@@ -67,57 +73,11 @@ function ensureDay(day) {
     }
 }
 
-/**
- * 🔥 WEBHOOK ENDPOINT (CRITICAL)
- */
-app.post('/telegram', (req, res) => {
-    console.log("📩 WEBHOOK RECEIVED:", JSON.stringify(req.body));
-
-    try {
-        bot.processUpdate(req.body);
-    } catch (e) {
-        console.error("WEBHOOK ERROR:", e);
-    }
-
-    res.sendStatus(200);
-});
-
-/**
- * 🤖 COMMANDS
- */
-bot.on('message', (msg) => {
-    if (msg.chat.id !== CHAT_ID) return;
-
-    const text = (msg.text || "").toLowerCase();
-
-    if (text === 'сегодня' || text === '/today') {
-        const day = getToday();
-        ensureDay(day);
-
-        const d = stats[day];
-
-        bot.sendMessage(msg.chat.id,
-`📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
-
-📩 Telegram: ${d.Telegram}
-📩 WhatsApp: ${d.WhatsApp}
-⚡ MAX: ${d.MAX}
-
-📈 Источники:
-- direct: ${d.direct}
-- yandex: ${d.yandex}
-- seo: ${d.seo}`);
-    }
-});
-
-/**
- * 📥 CLICK TRACKER
- */
 app.post('/click', (req, res) => {
     const body = req.body || {};
     const day = getToday();
 
-    ensureDay(day);
+    ensure(day);
 
     const event = (body.event || '').toLowerCase();
 
@@ -139,16 +99,36 @@ app.post('/click', (req, res) => {
 
     saveStats(stats);
 
-    console.log("CLICK RECEIVED:", body);
-
     res.json({ ok: true });
 });
 
 /**
- * 🚀 START SERVER
+ * 🤖 COMMANDS
  */
-app.listen(process.env.PORT || 3000, () => {
-    console.log("Server running (WEBHOOK MODE)");
+bot.on('message', (msg) => {
+    if (msg.chat.id !== CHAT_ID) return;
 
-    bot.sendMessage(CHAT_ID, "🟢 Bot online + webhook mode active + stable build");
+    if ((msg.text || '').toLowerCase() === 'сегодня') {
+        const day = getToday();
+        ensure(day);
+
+        const d = stats[day];
+
+        bot.sendMessage(msg.chat.id,
+`📊 СТАТИСТИКА (${day})
+
+Telegram: ${d.Telegram}
+WhatsApp: ${d.WhatsApp}
+MAX: ${d.MAX}
+
+direct: ${d.direct}
+yandex: ${d.yandex}
+seo: ${d.seo}`);
+    }
+});
+
+app.listen(process.env.PORT || 3000, () => {
+    console.log("🚀 SERVER READY (ROOT WEBHOOK MODE)");
+
+    bot.sendMessage(CHAT_ID, "🟢 Bot online (ROOT webhook mode)");
 });
