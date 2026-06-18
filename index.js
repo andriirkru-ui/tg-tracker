@@ -35,7 +35,7 @@ const bot = new TelegramBot(TOKEN);
  * =========================
  * СЮДА ДОЛЖЕН СТУЧАТЬ TELEGRAM
  */
-app.post('/', (req, res) => {
+app.post('/telegram', (req, res) => {
 
     // 🔥 ВАЖНЕЙШИЙ ЛОГ (проверка что Telegram реально пришёл)
     console.log("🔥 WEBHOOK HIT RECEIVED");
