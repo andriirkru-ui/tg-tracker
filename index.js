@@ -1,135 +1,62 @@
 const express = require("express");
-const cors = require("cors");
-const https = require("https");
+const fetch = require("node-fetch");
 
 const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// =====================
-// ENV
-// =====================
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-// =====================
-// MIDDLEWARE
-// =====================
-app.use(cors());
-app.use(express.json({ type: "*/*" }));
-app.use(express.urlencoded({ extended: true }));
+console.log("🚀 SERVER STARTED");
+console.log("BOT_TOKEN exists:", !!BOT_TOKEN);
+console.log("CHAT_ID value:", CHAT_ID); // 👈 ВАЖНО (НЕ boolean)
 
-// =====================
-// HEALTH CHECK
-// =====================
-app.get("/", (req, res) => {
-    res.send("tg-tracker is running");
-});
-
-// =====================
-// TELEGRAM SENDER (100% STABLE)
-// =====================
-function sendTelegram(text) {
-    return new Promise((resolve, reject) => {
-
-        const payload = JSON.stringify({
-            chat_id: CHAT_ID,
-            text: text
-        });
-
-        const options = {
-            hostname: "api.telegram.org",
-            path: `/bot${BOT_TOKEN}/sendMessage`,
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let data = "";
-
-            res.on("data", chunk => data += chunk);
-
-            res.on("end", () => {
-                console.log("📨 TELEGRAM RESPONSE:", data);
-                resolve(data);
-            });
-        });
-
-        req.on("error", (err) => {
-            console.error("❌ TELEGRAM ERROR:", err);
-            reject(err);
-        });
-
-        req.write(payload);
-        req.end();
-    });
-}
-
-// =====================
-// CLICK ENDPOINT
-// =====================
 app.post("/click", async (req, res) => {
-
-    console.log("🔥 CLICK RECEIVED");
-    console.log("BODY:", req.body);
-
-    const data = req.body || {};
-
-    let text = "";
-
-    // VISIT EVENT
-    if (data.event === "visit") {
-        text =
-`📍 VISIT
-source: ${data.source || "-"}
-medium: ${data.medium || "-"}
-campaign: ${data.campaign || "-"}
-url: ${data.url || "-"}`;
-    }
-
-    // MAIN CLICK EVENT
-    if (data.event === "messenger_click") {
-        text =
-`🔥 MESSENGER CLICK
-messenger: ${data.messenger || "-"}
-source: ${data.source || "-"}
-medium: ${data.medium || "-"}
-campaign: ${data.campaign || "-"}
-page: ${data.url || "-"}
-target: ${data.target || "-"}`;
-    }
-
-    // fallback (НА ВСЯКИЙ СЛУЧАЙ)
-    if (!text && data.messenger) {
-        text =
-`⚠️ RAW CLICK
-messenger: ${data.messenger}
-url: ${data.url || "-"}`;
-    }
-
-    if (!text) {
-        console.log("⚠️ EMPTY EVENT — SKIP");
-        return res.json({ ok: false });
-    }
-
     try {
-        await sendTelegram(text);
-        return res.json({ ok: true });
+        console.log("🔥 CLICK RECEIVED");
+        console.log("BODY:", req.body);
+
+        const data = req.body || {};
+
+        const text =
+            `📊 TRACKER EVENT\n\n` +
+            `event: ${data.event || "unknown"}\n` +
+            `messenger: ${data.messenger || "-"}\n` +
+            `source: ${data.source || "-"}\n` +
+            `campaign: ${data.campaign || "-"}\n` +
+            `url: ${data.url || "-"}`;
+
+        if (CHAT_ID) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+
+            const tgRes = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: text
+                })
+            });
+
+            const result = await tgRes.text();
+            console.log("📨 TELEGRAM RESPONSE:", result);
+        } else {
+            console.log("❌ NO CHAT_ID");
+        }
+
+        res.json({ ok: true });
+
     } catch (err) {
-        console.error("❌ SEND ERROR:", err);
-        return res.json({ ok: false });
+        console.error("❌ ERROR:", err);
+        res.status(500).json({ ok: false });
     }
 });
 
-// =====================
-// START SERVER
-// =====================
-const PORT = process.env.PORT || 8080;
+app.get("/", (req, res) => {
+    res.send("Server running");
+});
 
-app.listen(PORT, () => {
-    console.log("🚀 SERVER STARTED");
-    console.log("PORT:", PORT);
-    console.log("BOT_TOKEN:", !!BOT_TOKEN);
-    console.log("CHAT_ID:", !!CHAT_ID);
+app.listen(process.env.PORT || 8080, () => {
+    console.log("PORT:", process.env.PORT || 8080);
 });
