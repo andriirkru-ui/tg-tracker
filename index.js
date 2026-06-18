@@ -1,22 +1,17 @@
 const express = require('express');
-const cors = require('cors');
-
 const app = express();
 
-// 🔥 FIX: обязательно для URLSearchParams и form-data
-app.use(express.urlencoded({ extended: true }));
+const PORT = process.env.PORT || 8080;
+
+/* =========================
+   BODY PARSERS (КРИТИЧНО)
+========================= */
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// 🔥 CORS (важно для Тильды)
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
-}));
-
-// ======================
-// 📊 STORAGE (в памяти)
-// ======================
+/* =========================
+   SIMPLE STATS STORAGE
+========================= */
 const stats = {
     Telegram: 0,
     WhatsApp: 0,
@@ -28,62 +23,63 @@ const stats = {
     }
 };
 
-// ======================
-// 🔥 HEALTH CHECK
-// ======================
+/* =========================
+   ROOT
+========================= */
 app.get('/', (req, res) => {
     res.send('Server running (WEBHOOK MODE)');
 });
 
-// ======================
-// 📡 MAIN TRACKING ENDPOINT
-// ======================
+/* =========================
+   CLICK ENDPOINT
+========================= */
 app.post('/click', (req, res) => {
-    console.log('🔥 CLICK RECEIVED');
-    console.log('BODY:', req.body);
+
+    console.log("🔥 CLICK RECEIVED");
+    console.log("BODY:", req.body);
 
     const data = req.body || {};
 
-    // ======================
     // messenger tracking
-    // ======================
-    if (data.messenger === 'telegram') {
-        stats.Telegram++;
+    const messenger = data.messenger || null;
+
+    if (messenger === 'telegram') {
+        stats.Telegram = (stats.Telegram || 0) + 1;
     }
 
-    if (data.messenger === 'whatsapp') {
-        stats.WhatsApp++;
+    if (messenger === 'whatsapp') {
+        stats.WhatsApp = (stats.WhatsApp || 0) + 1;
     }
 
-    if (data.messenger === 'max') {
-        stats.MAX++;
+    if (messenger === 'max') {
+        stats.MAX = (stats.MAX || 0) + 1;
     }
 
-    // ======================
     // source tracking
-    // ======================
     const source = data.source || 'direct';
 
-    if (source === 'yandex') stats.sources.yandex++;
-    else if (source === 'seo') stats.sources.seo++;
-    else stats.sources.direct++;
+    if (source === 'yandex') {
+        stats.sources.yandex++;
+    } else if (source === 'seo') {
+        stats.sources.seo++;
+    } else {
+        stats.sources.direct++;
+    }
 
     res.json({ ok: true });
 });
 
-// ======================
-// 📊 STATS ENDPOINT (для теста)
-// ======================
+/* =========================
+   STATS ENDPOINT (optional)
+========================= */
 app.get('/stats', (req, res) => {
     res.json(stats);
 });
 
-// ======================
-// 🚀 START SERVER
-// ======================
-const PORT = process.env.PORT || 3000;
-
+/* =========================
+   START SERVER
+========================= */
 app.listen(PORT, () => {
-    console.log('🚀 SERVER STARTED (WEBHOOK MODE)');
-    console.log('PORT:', PORT);
+    console.log("🚀 SERVER STARTED (WEBHOOK MODE)");
+    console.log("PORT:", PORT);
 });
