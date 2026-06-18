@@ -7,40 +7,44 @@ const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
 if (!TOKEN) {
-  console.error("BOT_TOKEN not provided!");
-  process.exit(1);
+    console.error("BOT_TOKEN not provided!");
+    process.exit(1);
 }
 
 /**
- * 🔥 FIX 409:
- * stop any stuck polling session before start
+ * 🧠 FIX 409:
+ * Telegram иногда держит старую polling сессию
+ * поэтому полностью пересоздаём соединение безопасно
  */
 try {
-  const botTmp = new TelegramBot(TOKEN);
-  botTmp.stopPolling();
+    const tmpBot = new TelegramBot(TOKEN);
+    tmpBot.stopPolling();
 } catch (e) {
-  // ignore
+    // ignore
 }
 
 /**
- * ✅ STABLE POLLING CONFIG (NO 409 LOOP)
+ * ✅ STABLE POLLING (Railway-safe)
  */
 const bot = new TelegramBot(TOKEN, {
-  polling: {
-    autoStart: true,
-    interval: 2000,
-    params: {
-      timeout: 10
+    polling: {
+        autoStart: true,
+        interval: 4000,
+        params: {
+            timeout: 10
+        }
     }
-  }
 });
 
 const app = express();
 
+/**
+ * ✅ CORS FIXED
+ */
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
 }));
 
 app.options('*', cors());
@@ -48,43 +52,52 @@ app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+/**
+ * 📦 STORAGE
+ */
 const DB_FILE = './stats.json';
 
 function loadStats() {
-  if (!fs.existsSync(DB_FILE)) return {};
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    if (!fs.existsSync(DB_FILE)) return {};
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 }
 
 function saveStats(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
 let stats = loadStats();
 
+/**
+ * 📅 DATE (MSK SAFE)
+ */
 function getToday() {
-  return new Date().toLocaleString("en-CA", {
-    timeZone: "Europe/Moscow"
-  }).slice(0, 10);
+    return new Date().toLocaleString("en-CA", {
+        timeZone: "Europe/Moscow"
+    }).slice(0, 10);
 }
 
 function ensureDay(day) {
-  if (!stats[day]) {
-    stats[day] = {
-      Telegram: 0,
-      WhatsApp: 0,
-      MAX: 0,
-      direct: 0,
-      yandex: 0,
-      seo: 0
-    };
-  }
+    if (!stats[day]) {
+        stats[day] = {
+            Telegram: 0,
+            WhatsApp: 0,
+            MAX: 0,
+            direct: 0,
+            yandex: 0,
+            seo: 0
+        };
+    }
 }
 
+/**
+ * 📊 REPORT
+ */
 function sendReport(chatId, day, title) {
-  ensureDay(day);
-  const d = stats[day];
+    ensureDay(day);
+    const d = stats[day];
 
-  const text =
+    const text =
 `📊 ${title} (${day})
 
 📩 Мессенджеры:
@@ -98,58 +111,73 @@ yandex: ${d.yandex}
 seo: ${d.seo}
 `;
 
-  bot.sendMessage(chatId, text);
+    bot.sendMessage(chatId, text);
 }
 
+/**
+ * 🤖 BOT COMMANDS
+ */
 bot.on('message', (msg) => {
-  if (msg.chat.id !== CHAT_ID) return;
+    if (msg.chat.id !== CHAT_ID) return;
 
-  const text = (msg.text || "").toLowerCase().trim().split('@')[0];
+    const text = (msg.text || "").toLowerCase().trim().split('@')[0];
 
-  if (text === 'сегодня' || text === '/today') {
-    sendReport(msg.chat.id, getToday(), "СТАТИСТИКА ЗА СЕГОДНЯ");
-  }
-});
-
-app.get('/', (req, res) => {
-  res.send('Tracker is running');
+    if (text === 'сегодня' || text === '/today') {
+        sendReport(msg.chat.id, getToday(), "СТАТИСТИКА ЗА СЕГОДНЯ");
+    }
 });
 
 /**
- * 📌 CLICK API
+ * 🌐 HEALTHCHECK
  */
-app.post('/click', (req, res) => {
-  const body = req.body || {};
-  const day = getToday();
-
-  ensureDay(day);
-
-  const event = (body.event || '').toLowerCase();
-  const source = (body.source || '').toLowerCase();
-  const messenger = (body.messenger || '').toLowerCase();
-
-  console.log("CLICK RECEIVED:", body);
-
-  if (event === 'visit') {
-    if (source === 'yandex') stats[day].yandex++;
-    else if (source === 'seo') stats[day].seo++;
-    else stats[day].direct++;
-  }
-
-  if (event === 'messenger_click') {
-    if (messenger === 'telegram') stats[day].Telegram++;
-    if (messenger === 'whatsapp') stats[day].WhatsApp++;
-    if (messenger === 'max') stats[day].MAX++;
-  }
-
-  saveStats(stats);
-
-  res.json({ ok: true });
+app.get('/', (req, res) => {
+    res.send('Tracker is running');
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Bot started");
-  console.log("Server running with CORS enabled");
+/**
+ * 📥 CLICK TRACKER
+ */
+app.post('/click', (req, res) => {
+    const body = req.body || {};
+    const day = getToday();
 
-  bot.sendMessage(CHAT_ID, "🟢 Bot online + stable polling + analytics active");
+    ensureDay(day);
+
+    const event = (body.event || '').toLowerCase();
+    const source = (body.source || '').toLowerCase();
+    const messenger = (body.messenger || '').toLowerCase();
+
+    console.log("CLICK RECEIVED:", body);
+
+    /**
+     * VISITS (UTM)
+     */
+    if (event === 'visit') {
+        if (source === 'yandex') stats[day].yandex++;
+        else if (source === 'seo') stats[day].seo++;
+        else stats[day].direct++;
+    }
+
+    /**
+     * MESSENGERS
+     */
+    if (event === 'messenger_click') {
+        if (messenger === 'telegram') stats[day].Telegram++;
+        if (messenger === 'whatsapp') stats[day].WhatsApp++;
+        if (messenger === 'max') stats[day].MAX++;
+    }
+
+    saveStats(stats);
+
+    res.json({ ok: true });
+});
+
+/**
+ * 🚀 START SERVER
+ */
+app.listen(process.env.PORT || 3000, () => {
+    console.log("Bot started");
+    console.log("Server running with CORS enabled");
+
+    bot.sendMessage(CHAT_ID, "🟢 Bot online + stable polling FIXED + analytics active");
 });
