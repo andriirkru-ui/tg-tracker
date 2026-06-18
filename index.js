@@ -4,20 +4,35 @@ const https = require("https");
 
 const app = express();
 
+// =====================
+// ENV
+// =====================
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
+// =====================
+// MIDDLEWARE (ВАЖНО ДЛЯ TILDA)
+// =====================
 app.use(cors());
-app.use(express.json());
+
+// принимает JSON + form-data (Tilda может слать по-разному)
+app.use(express.json({ type: "*/*" }));
 app.use(express.urlencoded({ extended: true }));
 
+// =====================
+// HEALTH CHECK
+// =====================
 app.get("/", (req, res) => {
-    res.send("tg-tracker alive");
+    res.send("tg-tracker OK");
 });
 
+// =====================
+// TELEGRAM SENDER (СТАБИЛЬНЫЙ)
+// =====================
 function sendTelegram(text) {
     return new Promise((resolve, reject) => {
-        const data = JSON.stringify({
+
+        const payload = JSON.stringify({
             chat_id: CHAT_ID,
             text: text
         });
@@ -28,63 +43,88 @@ function sendTelegram(text) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(data)
+                "Content-Length": Buffer.byteLength(payload)
             }
         };
 
         const req = https.request(options, (res) => {
-            let body = "";
+            let data = "";
 
-            res.on("data", (chunk) => body += chunk);
+            res.on("data", chunk => data += chunk);
+
             res.on("end", () => {
-                console.log("📨 TG RESPONSE:", body);
-                resolve(body);
+                console.log("📨 TELEGRAM RESPONSE:", data);
+                resolve(data);
             });
         });
 
         req.on("error", (err) => {
-            console.error("❌ TG ERROR:", err);
+            console.error("❌ TELEGRAM ERROR:", err);
             reject(err);
         });
 
-        req.write(data);
+        req.write(payload);
         req.end();
     });
 }
 
+// =====================
+// CLICK ENDPOINT
+// =====================
 app.post("/click", async (req, res) => {
-    console.log("🔥 CLICK RECEIVED:", req.body);
+
+    console.log("🔥 CLICK RECEIVED");
+    console.log("HEADERS:", req.headers);
+    console.log("BODY:", req.body);
 
     const data = req.body || {};
 
     let text = "";
 
+    // VISIT
     if (data.event === "visit") {
-        text = `📍 VISIT\n${data.url}`;
+        text =
+`📍 VISIT
+source: ${data.source || "-"}
+medium: ${data.medium || "-"}
+campaign: ${data.campaign || "-"}
+url: ${data.url || "-"}`;
     }
 
+    // CLICK
     if (data.event === "messenger_click") {
         text =
 `🔥 CLICK
-messenger: ${data.messenger}
-source: ${data.source}
-campaign: ${data.campaign}
-page: ${data.url}`;
+messenger: ${data.messenger || "-"}
+source: ${data.source || "-"}
+campaign: ${data.campaign || "-"}
+page: ${data.url || "-"}
+target: ${data.target || "-"}`;
+    }
+
+    // если пусто → защита
+    if (!text) {
+        console.log("⚠️ EMPTY EVENT — SKIP");
+        return res.json({ ok: false, error: "empty event" });
     }
 
     try {
         await sendTelegram(text);
         return res.json({ ok: true });
-    } catch (e) {
-        console.error("❌ SEND FAILED:", e);
+    } catch (err) {
+        console.error("❌ SEND FAILED:", err);
         return res.json({ ok: false });
     }
 });
 
+// =====================
+// START
+// =====================
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
     console.log("🚀 SERVER STARTED");
+    console.log("PORT:", PORT);
     console.log("BOT_TOKEN:", !!BOT_TOKEN);
     console.log("CHAT_ID:", !!CHAT_ID);
 });
