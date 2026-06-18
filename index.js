@@ -1,82 +1,95 @@
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 8080;
 
-/* =========================
-   ENV CHECK (ВАЖНО!)
-========================= */
+// =====================
+// ENV
+// =====================
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-console.log("BOT_TOKEN exists:", !!BOT_TOKEN);
-console.log("CHAT_ID exists:", !!CHAT_ID);
-
-/* ========================= */
-app.use(cors({ origin: '*' }));
+// =====================
+// MIDDLEWARE
+// =====================
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* ========================= */
-let stats = {
-    Telegram: 0,
-    WhatsApp: 0,
-    MAX: 0
-};
+// =====================
+// HEALTHCHECK
+// =====================
+app.get("/", (req, res) => {
+    res.send("tg-tracker is running");
+});
 
-/* ========================= */
-async function sendTG(text) {
-
-    console.log("➡️ sendTG CALLED");
-
-    if (!BOT_TOKEN || !CHAT_ID) {
-        console.log("❌ MISSING ENV VARS");
-        return;
-    }
-
-    try {
-        const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                chat_id: CHAT_ID,
-                text
-            })
-        });
-
-        console.log("📩 TG STATUS:", await resp.text());
-
-    } catch (err) {
-        console.log("❌ TG ERROR:", err.message);
-    }
-}
-
-/* ========================= */
-app.post('/click', async (req, res) => {
-
+// =====================
+// MAIN CLICK ENDPOINT
+// =====================
+app.post("/click", async (req, res) => {
     console.log("🔥 CLICK RECEIVED:", req.body);
 
     const data = req.body || {};
 
-    const messenger = data.messenger || 'unknown';
+    if (!BOT_TOKEN || !CHAT_ID) {
+        console.log("❌ Missing BOT_TOKEN or CHAT_ID");
+        return res.json({ ok: false, error: "ENV missing" });
+    }
 
-    if (messenger === 'telegram') stats.Telegram++;
-    if (messenger === 'whatsapp') stats.WhatsApp++;
-    if (messenger === 'max') stats.MAX++;
+    let text = "";
 
-    await sendTG(`🔥 CLICK: ${messenger}`);
+    if (data.event === "visit") {
+        text =
+`📍 VISIT
+source: ${data.source}
+medium: ${data.medium}
+campaign: ${data.campaign}
+url: ${data.url || "-"}`;
+    }
 
-    res.json({ ok: true });
+    if (data.event === "messenger_click") {
+        text =
+`🔥 CLICK
+messenger: ${data.messenger}
+source: ${data.source}
+campaign: ${data.campaign}
+page: ${data.url}
+target: ${data.target}`;
+    }
+
+    try {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: text
+            })
+        });
+
+        const result = await response.json();
+
+        console.log("📨 TELEGRAM RESPONSE:", result);
+
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("❌ TELEGRAM ERROR:", err);
+        return res.json({ ok: false, error: err.message });
+    }
 });
 
-/* ========================= */
-app.get('/', (req, res) => {
-    res.send('OK');
-});
+// =====================
+// START SERVER
+// =====================
+const PORT = process.env.PORT || 8080;
 
-/* ========================= */
 app.listen(PORT, () => {
     console.log("🚀 SERVER STARTED");
     console.log("PORT:", PORT);
+    console.log("BOT_TOKEN exists:", !!BOT_TOKEN);
+    console.log("CHAT_ID exists:", !!CHAT_ID);
 });
