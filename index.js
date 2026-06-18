@@ -1,60 +1,23 @@
-const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
+const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
 const fs = require('fs');
 
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
-if (!TOKEN) {
-    console.error("BOT_TOKEN not provided!");
-    process.exit(1);
-}
-
-/**
- * 🧠 FIX 409:
- * Telegram иногда держит старую polling сессию
- * поэтому полностью пересоздаём соединение безопасно
- */
-try {
-    const tmpBot = new TelegramBot(TOKEN);
-    tmpBot.stopPolling();
-} catch (e) {
-    // ignore
-}
-
-/**
- * ✅ STABLE POLLING (Railway-safe)
- */
-const bot = new TelegramBot(TOKEN, {
-    polling: {
-        autoStart: true,
-        interval: 4000,
-        params: {
-            timeout: 10
-        }
-    }
-});
-
 const app = express();
 
-/**
- * ✅ CORS FIXED
- */
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
 
-app.options('*', cors());
-
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-/**
- * 📦 STORAGE
- */
+const bot = new TelegramBot(TOKEN); // ❗ NO POLLING
+
 const DB_FILE = './stats.json';
 
 function loadStats() {
@@ -68,9 +31,6 @@ function saveStats(data) {
 
 let stats = loadStats();
 
-/**
- * 📅 DATE (MSK SAFE)
- */
 function getToday() {
     return new Date().toLocaleString("en-CA", {
         timeZone: "Europe/Moscow"
@@ -91,93 +51,79 @@ function ensureDay(day) {
 }
 
 /**
- * 📊 REPORT
+ * 📡 WEBHOOK RECEIVER (Telegram updates)
  */
-function sendReport(chatId, day, title) {
-    ensureDay(day);
-    const d = stats[day];
-
-    const text =
-`📊 ${title} (${day})
-
-📩 Мессенджеры:
-Telegram: ${d.Telegram}
-WhatsApp: ${d.WhatsApp}
-MAX: ${d.MAX}
-
-📈 Источники:
-direct: ${d.direct}
-yandex: ${d.yandex}
-seo: ${d.seo}
-`;
-
-    bot.sendMessage(chatId, text);
-}
+app.post('/telegram', (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
 
 /**
- * 🤖 BOT COMMANDS
+ * 🤖 COMMANDS
  */
 bot.on('message', (msg) => {
     if (msg.chat.id !== CHAT_ID) return;
 
-    const text = (msg.text || "").toLowerCase().trim().split('@')[0];
+    const text = (msg.text || "").toLowerCase();
 
     if (text === 'сегодня' || text === '/today') {
-        sendReport(msg.chat.id, getToday(), "СТАТИСТИКА ЗА СЕГОДНЯ");
-    }
-});
+        const day = getToday();
+        ensureDay(day);
 
-/**
- * 🌐 HEALTHCHECK
- */
-app.get('/', (req, res) => {
-    res.send('Tracker is running');
+        const d = stats[day];
+
+        bot.sendMessage(msg.chat.id,
+`📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
+
+Telegram: ${d.Telegram}
+WhatsApp: ${d.WhatsApp}
+MAX: ${d.MAX}
+
+direct: ${d.direct}
+yandex: ${d.yandex}
+seo: ${d.seo}`);
+    }
 });
 
 /**
  * 📥 CLICK TRACKER
  */
 app.post('/click', (req, res) => {
-    const body = req.body || {};
+    const body = req.body;
     const day = getToday();
 
     ensureDay(day);
 
     const event = (body.event || '').toLowerCase();
-    const source = (body.source || '').toLowerCase();
-    const messenger = (body.messenger || '').toLowerCase();
 
-    console.log("CLICK RECEIVED:", body);
+    if (event === 'messenger_click') {
+        const m = (body.messenger || '').toLowerCase();
 
-    /**
-     * VISITS (UTM)
-     */
+        if (m === 'telegram') stats[day].Telegram++;
+        if (m === 'whatsapp') stats[day].WhatsApp++;
+        if (m === 'max') stats[day].MAX++;
+    }
+
     if (event === 'visit') {
+        const source = (body.source || '').toLowerCase();
+
         if (source === 'yandex') stats[day].yandex++;
         else if (source === 'seo') stats[day].seo++;
         else stats[day].direct++;
     }
 
-    /**
-     * MESSENGERS
-     */
-    if (event === 'messenger_click') {
-        if (messenger === 'telegram') stats[day].Telegram++;
-        if (messenger === 'whatsapp') stats[day].WhatsApp++;
-        if (messenger === 'max') stats[day].MAX++;
-    }
-
     saveStats(stats);
+
+    console.log("CLICK RECEIVED:", body);
 
     res.json({ ok: true });
 });
 
 /**
- * 🚀 START SERVER
+ * 🚀 START
  */
 app.listen(process.env.PORT || 3000, () => {
-    console.log("Bot started");
-    console.log("Server running with CORS enabled");
+    console.log("Server running (WEBHOOK MODE)");
 
-    bot.sendMessage(CHAT_ID, "🟢 Bot online + stable polling FIXED + analytics active");
+    bot.sendMessage(CHAT_ID, "🟢 Bot online + webhook mode active");
 });
