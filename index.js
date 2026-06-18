@@ -1,15 +1,14 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 /* =========================
-   TELEGRAM CONFIG (ВСТАВЛЕНО)
+   CONFIG
 ========================= */
-const BOT_TOKEN = "8759669567:AAGoYe0qRga8_HW9USqVpIuddSNQEHQPPq";
-const CHAT_ID = process.env.CHAT_ID; // оставь как переменную Railway
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const CHAT_ID = process.env.CHAT_ID;
 
 /* =========================
    MIDDLEWARE
@@ -33,25 +32,35 @@ let stats = {
 };
 
 /* =========================
-   TELEGRAM SENDER
+   TELEGRAM SENDER (NO node-fetch!)
 ========================= */
 async function sendTG(text) {
-    if (!CHAT_ID) return;
+
+    if (!BOT_TOKEN || !CHAT_ID) return;
 
     try {
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({
                 chat_id: CHAT_ID,
-                text,
+                text: text,
                 parse_mode: "HTML"
             })
         });
-    } catch (e) {
-        console.log("TG ERROR:", e);
+    } catch (err) {
+        console.log("TG ERROR:", err.message);
     }
 }
+
+/* =========================
+   ROOT
+========================= */
+app.get('/', (req, res) => {
+    res.send('Server running (WEBHOOK MODE)');
+});
 
 /* =========================
    CLICK ENDPOINT
@@ -63,6 +72,7 @@ app.post('/click', async (req, res) => {
     const messenger = data.messenger || 'unknown';
     const source = data.source || 'direct';
 
+    /* stats update */
     if (messenger === 'telegram') stats.Telegram++;
     if (messenger === 'whatsapp') stats.WhatsApp++;
     if (messenger === 'max') stats.MAX++;
@@ -71,19 +81,19 @@ app.post('/click', async (req, res) => {
     else if (source === 'seo') stats.sources.seo++;
     else stats.sources.direct++;
 
-    /* 🔔 LIVE NOTIFICATION */
+    /* telegram notification */
     await sendTG(
 `🔥 <b>КЛИК</b>
-📌 Messenger: ${messenger}
-🌍 Source: ${source}
-🔗 URL: ${data.url || ''}`
+📌 ${messenger}
+🌍 ${source}
+🔗 ${data.url || ''}`
     );
 
     res.json({ ok: true });
 });
 
 /* =========================
-   REPORT
+   REPORT FUNCTION
 ========================= */
 function report(title) {
     return `
@@ -122,5 +132,6 @@ app.get('/week', async (req, res) => {
    START
 ========================= */
 app.listen(PORT, () => {
-    console.log("🚀 SERVER STARTED");
+    console.log("🚀 SERVER STARTED (WEBHOOK MODE)");
+    console.log("PORT:", PORT);
 });
