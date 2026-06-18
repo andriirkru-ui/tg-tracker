@@ -3,48 +3,87 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+// 🔥 FIX: обязательно для URLSearchParams и form-data
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-/* =========================
-   GLOBAL LOGGER (ВАЖНО)
-========================= */
-app.use((req, res, next) => {
-    console.log(`➡️ ${req.method} ${req.url}`);
-    next();
-});
+// 🔥 CORS (важно для Тильды)
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
+}));
 
-/* =========================
-   HEALTHCHECK
-========================= */
+// ======================
+// 📊 STORAGE (в памяти)
+// ======================
+const stats = {
+    Telegram: 0,
+    WhatsApp: 0,
+    MAX: 0,
+    sources: {
+        direct: 0,
+        yandex: 0,
+        seo: 0
+    }
+};
+
+// ======================
+// 🔥 HEALTH CHECK
+// ======================
 app.get('/', (req, res) => {
-    console.log('🏠 HEALTHCHECK HIT');
-    res.send('OK');
+    res.send('Server running (WEBHOOK MODE)');
 });
 
-/* =========================
-   CLICK ENDPOINT
-========================= */
+// ======================
+// 📡 MAIN TRACKING ENDPOINT
+// ======================
 app.post('/click', (req, res) => {
-    console.log('🔥 CLICK RECEIVED BODY:', req.body);
+    console.log('🔥 CLICK RECEIVED');
+    console.log('BODY:', req.body);
+
+    const data = req.body || {};
+
+    // ======================
+    // messenger tracking
+    // ======================
+    if (data.messenger === 'telegram') {
+        stats.Telegram++;
+    }
+
+    if (data.messenger === 'whatsapp') {
+        stats.WhatsApp++;
+    }
+
+    if (data.messenger === 'max') {
+        stats.MAX++;
+    }
+
+    // ======================
+    // source tracking
+    // ======================
+    const source = data.source || 'direct';
+
+    if (source === 'yandex') stats.sources.yandex++;
+    else if (source === 'seo') stats.sources.seo++;
+    else stats.sources.direct++;
+
     res.json({ ok: true });
 });
 
-/* =========================
-   TELEGRAM WEBHOOK
-========================= */
-app.post('/telegram', (req, res) => {
-    console.log('🔥 TELEGRAM WEBHOOK HIT');
-    console.log(req.body);
-    res.sendStatus(200);
+// ======================
+// 📊 STATS ENDPOINT (для теста)
+// ======================
+app.get('/stats', (req, res) => {
+    res.json(stats);
 });
 
-/* =========================
-   START
-========================= */
+// ======================
+// 🚀 START SERVER
+// ======================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log('🚀 SERVER STARTED (DEBUG MODE)');
+    console.log('🚀 SERVER STARTED (WEBHOOK MODE)');
+    console.log('PORT:', PORT);
 });
