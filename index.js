@@ -6,18 +6,32 @@ const fs = require('fs');
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = -5473275880;
 
+if (!TOKEN) {
+    console.error("BOT_TOKEN not provided!");
+    process.exit(1);
+}
+
 const app = express();
 
+/**
+ * ✅ CORS (Tilda → Railway)
+ */
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type']
 }));
 
 app.use(express.json());
 
-const bot = new TelegramBot(TOKEN); // ❗ NO POLLING
+/**
+ * ⚠️ WEBHOOK MODE (NO POLLING!)
+ */
+const bot = new TelegramBot(TOKEN);
 
+/**
+ * 📦 DB
+ */
 const DB_FILE = './stats.json';
 
 function loadStats() {
@@ -31,6 +45,9 @@ function saveStats(data) {
 
 let stats = loadStats();
 
+/**
+ * 📅 DATE (MSK SAFE)
+ */
 function getToday() {
     return new Date().toLocaleString("en-CA", {
         timeZone: "Europe/Moscow"
@@ -51,10 +68,17 @@ function ensureDay(day) {
 }
 
 /**
- * 📡 WEBHOOK RECEIVER (Telegram updates)
+ * 🔥 WEBHOOK ENDPOINT (CRITICAL)
  */
 app.post('/telegram', (req, res) => {
-    bot.processUpdate(req.body);
+    console.log("📩 WEBHOOK RECEIVED:", JSON.stringify(req.body));
+
+    try {
+        bot.processUpdate(req.body);
+    } catch (e) {
+        console.error("WEBHOOK ERROR:", e);
+    }
+
     res.sendStatus(200);
 });
 
@@ -75,13 +99,14 @@ bot.on('message', (msg) => {
         bot.sendMessage(msg.chat.id,
 `📊 СТАТИСТИКА ЗА СЕГОДНЯ (${day})
 
-Telegram: ${d.Telegram}
-WhatsApp: ${d.WhatsApp}
-MAX: ${d.MAX}
+📩 Telegram: ${d.Telegram}
+📩 WhatsApp: ${d.WhatsApp}
+⚡ MAX: ${d.MAX}
 
-direct: ${d.direct}
-yandex: ${d.yandex}
-seo: ${d.seo}`);
+📈 Источники:
+- direct: ${d.direct}
+- yandex: ${d.yandex}
+- seo: ${d.seo}`);
     }
 });
 
@@ -89,7 +114,7 @@ seo: ${d.seo}`);
  * 📥 CLICK TRACKER
  */
 app.post('/click', (req, res) => {
-    const body = req.body;
+    const body = req.body || {};
     const day = getToday();
 
     ensureDay(day);
@@ -120,10 +145,10 @@ app.post('/click', (req, res) => {
 });
 
 /**
- * 🚀 START
+ * 🚀 START SERVER
  */
 app.listen(process.env.PORT || 3000, () => {
     console.log("Server running (WEBHOOK MODE)");
 
-    bot.sendMessage(CHAT_ID, "🟢 Bot online + webhook mode active");
+    bot.sendMessage(CHAT_ID, "🟢 Bot online + webhook mode active + stable build");
 });
