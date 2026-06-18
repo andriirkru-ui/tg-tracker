@@ -8,15 +8,26 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* =========================
-   START LOG
+   GLOBAL LOGGER (ВАЖНО)
 ========================= */
-console.log('🚀 SERVER FILE LOADED');
+app.use((req, res, next) => {
+    console.log(`➡️ ${req.method} ${req.url}`);
+    next();
+});
+
+/* =========================
+   HEALTHCHECK
+========================= */
+app.get('/', (req, res) => {
+    console.log('🏠 HEALTHCHECK HIT');
+    res.send('OK');
+});
 
 /* =========================
    CLICK ENDPOINT
 ========================= */
 app.post('/click', (req, res) => {
-    console.log('🔥 CLICK RECEIVED:', req.body);
+    console.log('🔥 CLICK RECEIVED BODY:', req.body);
     res.json({ ok: true });
 });
 
@@ -30,17 +41,10 @@ app.post('/telegram', (req, res) => {
 });
 
 /* =========================
-   HEALTHCHECK
-========================= */
-app.get('/', (req, res) => {
-    res.send('Server running (WEBHOOK MODE)');
-});
-
-/* =========================
    START
 ========================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log('🚀 SERVER STARTED (WEBHOOK MODE)');
+    console.log('🚀 SERVER STARTED (DEBUG MODE)');
 });
