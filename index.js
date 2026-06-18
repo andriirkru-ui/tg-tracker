@@ -1,7 +1,16 @@
 const express = require("express");
+const cors = require("cors");
+
 const app = express();
 
-console.log("🔥 FILE LOADED - NEW VERSION");
+console.log("🔥 FILE LOADED - FIXED VERSION");
+
+// ✅ FIX CORS (КРИТИЧНО)
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"]
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -9,12 +18,12 @@ app.use(express.urlencoded({ extended: true }));
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-// проверка сервера
+// healthcheck
 app.get("/", (req, res) => {
     res.send("OK");
 });
 
-// главный трекинг
+// 🔥 CLICK ENDPOINT
 app.post("/click", async (req, res) => {
 
     console.log("🔥 CLICK ENDPOINT HIT");
@@ -28,31 +37,28 @@ app.post("/click", async (req, res) => {
             `event: ${data.event || "-"}\n` +
             `messenger: ${data.messenger || "-"}\n` +
             `source: ${data.source || "-"}\n` +
-            `medium: ${data.medium || "-"}\n` +
-            `campaign: ${data.campaign || "-"}\n` +
             `url: ${data.url || "-"}`;
 
-        const response = await fetch(
-            `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chat_id: CHAT_ID,
-                    text
-                })
-            }
-        );
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text
+            })
+        });
 
-        const result = await response.text();
-        console.log("📨 TELEGRAM RESPONSE:", result);
+        console.log("📨 SENT TO TELEGRAM");
 
-    } catch (err) {
-        console.log("❌ ERROR:", err);
+    } catch (e) {
+        console.log("❌ ERROR:", e);
     }
 
     res.json({ ok: true });
 });
+
+// fallback OPTIONS (важно для preflight)
+app.options("*", cors());
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
